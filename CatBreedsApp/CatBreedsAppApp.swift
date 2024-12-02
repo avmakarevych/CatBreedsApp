@@ -8,10 +8,13 @@
 import SwiftUI
 
 @main
-struct CatBreedsAppApp: App {
+struct CatBreedsAppApp: App {    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            BreedGridView()
+                .environmentObject(NetworkManager())
+                .preferredColorScheme(.light)
         }
     }
 }
+

@@ -4,33 +4,96 @@
 //
 //  Created by Андрій Макаревич on 02.12.2024.
 //
-
 import XCTest
+import Combine
 @testable import CatBreedsApp
 
 final class CatBreedsAppTests: XCTestCase {
-
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
+    var viewModel: BreedViewModel!
+    var mockAPI: MockCatAPI!
+    private var cancellables = Set<AnyCancellable>()
+    
+    override func setUp() {
+        super.setUp()
+        mockAPI = MockCatAPI()
+        viewModel = BreedViewModel(api: mockAPI)
     }
-
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
+    
+    override func tearDown() {
+        viewModel = nil
+        mockAPI = nil
+        super.tearDown()
     }
-
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
+    
+    func testFetchBreeds_Success() {
+        // Arrange
+        let breeds = [
+            Breed(id: "1", name: "Siamese"),
+            Breed(id: "2", name: "Persian")
+        ]
+        mockAPI.fetchBreedsResult = Just(breeds)
+            .setFailureType(to: Error.self)
+            .eraseToAnyPublisher()
+        
+        let expectation = XCTestExpectation(description: "Breeds fetched successfully")
+        
+        // Act
+        viewModel.fetchBreeds()
+        
+        // Assert
+        viewModel.$breeds
+            .dropFirst()
+            .sink { fetchedBreeds in
+                XCTAssertNil(self.viewModel.errorMessage)
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+        
+        wait(for: [expectation], timeout: 1.0)
     }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
-        }
+    
+    func testFetchBreeds_Failure() {
+        // Arrange
+        let error = URLError(.notConnectedToInternet)
+        mockAPI.fetchBreedsResult = Fail(error: error).eraseToAnyPublisher()
+        
+        let expectation = XCTestExpectation(description: "Breeds fetch failed")
+        
+        // Act
+        viewModel.fetchBreeds()
+        
+        // Assert
+        viewModel.$errorMessage
+            .dropFirst()
+            .sink { errorMessage in
+                XCTAssertEqual(self.viewModel.breeds.count, 0)
+                XCTAssertFalse(self.viewModel.isLoading)
+                XCTAssertEqual(errorMessage, error.localizedDescription)
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+        
+        wait(for: [expectation], timeout: 1.0)
     }
-
+    
+    func testFilteredBreeds() {
+        // Arrange
+        let breeds = [
+            Breed(id: "1", name: "Siamese"),
+            Breed(id: "2", name: "Persian"),
+            Breed(id: "3", name: "Siberian")
+        ]
+        viewModel.breeds = breeds
+        
+        // Act & Assert
+        viewModel.searchText = "si"
+        XCTAssertEqual(viewModel.filteredBreeds.count, 3)
+        
+        viewModel.searchText = "per"
+        XCTAssertEqual(viewModel.filteredBreeds.count, 1)
+        
+        viewModel.searchText = ""
+        XCTAssertEqual(viewModel.filteredBreeds.count, 3)
+    }
 }
+
